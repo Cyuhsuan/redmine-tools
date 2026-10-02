@@ -1,0 +1,16 @@
+{
+  "name": "redmine-tools",
+  "owner": {
+    "name": "Harry Chang"
+  },
+  "metadata": {
+    "description": "Redmine skills for Claude Code: issue lookup/updates and commit-based timesheets."
+  },
+  "plugins": [
+    {
+      "name": "redmine-tools",
+      "source": "./",
+      "description": "Redmine issue lookup/updates and commit-based timesheet logging."
+    }
+  ]
+}
