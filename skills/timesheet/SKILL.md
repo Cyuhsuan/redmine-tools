@@ -73,7 +73,8 @@ into **sessions**: consecutive commits no more than 2 h apart on the same day.
 
 Also reported: `missing_repos` — Scope entries whose path is gone or no longer a repo — and
 `uncommitted` changes. Missing Repos are skipped, never removed from the Scope automatically;
-list them as ⚠ under the table. Show uncommitted work as a note only — it carries no hours.
+pass them to stage 4 so the rendered table lists them as ⚠. Show uncommitted work as a
+note only, after the table — it carries no hours.
 
 ## 3. Map to work items
 
@@ -98,62 +99,63 @@ times in the 依據 column.
 Fetch what is already logged for the range so nothing is double-counted, using the Platform
 file's **Already logged** call.
 
-### Top up to 8 h
+### Rows
 
-Commit gaps miss reading, meetings and debugging, so each day with commits is topped up to 8 h.
-Write the work-item rows to `rows.json` in the scratchpad and run:
-
-```bash
-python3 <skill-dir>/scripts/allocate.py <scratchpad>/rows.json
-```
+Commit gaps miss reading, meetings and debugging, so each day with commits is topped up to 8 h,
+and the review table is rendered by script. You prepare one file, `rows.json` in the
+scratchpad; the scripts do all arithmetic and all formatting.
 
 ```json
-{"target_hours": 8,
+{"since": "2026-10-01", "until": "2026-10-01", "target_hours": 8,
  "logged": {"2026-10-01": 1.0},
+ "existing_entries": [{"ticket": "57379", "date": "2026-10-01"}],
+ "missing_repos": [],
  "rows": [{"id": "57379@2026-10-01", "date": "2026-10-01", "hours": 2.0, "lines": 11237,
-           "allocatable": true, "locked": false}]}
+           "allocatable": true, "locked": false,
+           "ticket": "57379", "subject": "開發-B1-7-0 公司治理", "activity": "9 程式開發",
+           "summary": "新增表單定義與欄位驗證", "basis": "14:19–15:47 d26b18a…378e3fa (7)",
+           "mapping": "明確票號",
+           "sessions": [{"repo": "/path/to/repo", "start": "14:19", "end": "15:47"}]}]}
 ```
 
 - `hours` = the row's summed `estimated_hours`; `lines` = the row's summed session `lines`
   (changed lines, lockfiles and generated files excluded).
-- `logged` = hours already on the Platform per date, from the call above.
-- `allocatable: false` for 未對應 rows — they get nothing and do not count toward the day.
+- `logged` = hours already on the Platform per date; `existing_entries` = the ticket+date pairs
+  already there. Both from the **Already logged** call.
+- `missing_repos` = collect.py's `missing_repos`, as-is.
+- `allocatable: false` and no `ticket` for 未對應 rows — they get nothing and do not count
+  toward the day.
 - `locked: true` for any row whose hours the user set by hand — it keeps exactly that value.
+- `activity`: the Platform file's **Activities** — default is the development activity. Use
+  review or discussion only when every commit in the row is clearly that kind of work.
+- `summary` (說明): one Traditional Chinese line summarising the commit subjects — what was
+  done, not how.
+- `basis` (依據): session times and short hashes, e.g. `14:19–15:47 d26b18a…378e3fa (7)`.
+- `mapping` (對應方式): the stage 3 rule that matched.
+- `sessions`: every session merged into the row, with its Repo — used to flag parallel work.
 
-Shortfall = 8 − logged − planned, in whole 0.5 h units, split by √(changed lines) with largest
-remainder, so the day lands on exactly 8 h when the shortfall is a multiple of 0.5. Days already
-at or over 8 h are left alone and flagged `over_target`. Days with no commits get no rows — never
-invent work for them.
+### Render
 
-Take `hours` from the output. Do not redistribute by hand; if the user disagrees with a split,
-lock the row at their number and rerun, so the rest rebalances.
+```bash
+python3 <skill-dir>/scripts/allocate.py <scratchpad>/rows.json > <scratchpad>/allocated.json
+python3 <skill-dir>/scripts/render.py <scratchpad>/allocated.json \
+  > <scratchpad>/timesheet-<since>[_<until>].md
+```
 
-### The table
+Show the md file's content in chat verbatim. Do not reformat, reorder, re-total or add rows,
+and do not write any table, total or ⚠ line yourself — if something is wrong, fix `rows.json`
+and rerun both scripts.
 
-Write `timesheet-<since>[_<until>].md` to the scratchpad and show the same table in chat:
-
-| # | 日期 | 票號 | 主旨 | 活動 | 估算 | 補分配 | 時數 | 說明 | 依據 | 對應方式 |
-
-估算 = `base_hours`, 補分配 = `added_hours`, 時數 = what will be sent.
-
-- 活動: the Platform file's **Activities** — default is the development activity. Use review or
-  discussion only when every commit in the row is clearly that kind of work.
-- 說明: one Traditional Chinese line summarising the commit subjects — what was done, not how.
-- 依據: session times and short hashes, e.g. `14:19–15:47 d26b18a…378e3fa (7)`.
-
-Below the table:
-
-- Per day: 已在平台 / 本次估算 / 補分配 / 送出後合計 (should read 8).
-- ⚠ rows: 未對應 (unallocated — mapping it changes the split, so rerun allocate); same
-  work item+date already has a time entry; a day over 8 h; sessions in different repos that
-  overlap in time (parallel agents — the user decides whether both count); each missing Repo
-  with its reason (say 「移除 <repo>」 to drop it from the Scope).
-- A one-line note that 補分配 is proportional to changed lines, not measured time — say 「指定某
-  列時數」 to lock it and rebalance the rest.
+What the scripts guarantee: Top-up fills each day's shortfall (8 − logged − planned) in whole
+0.5 h units, split by √(changed lines) with largest remainder; days already over target are
+left alone; days with no commits get no rows. The md file always has the same 11 columns, the
+per-day totals, and the ⚠ list (未對應, ticket+date already logged, over target, overlapping
+sessions across Repos, missing Repos).
 
 Then stop and wait. The user edits the md file or replies with changes; re-read the file before
-stage 5. Any changed 時數 becomes a `locked` row and any newly mapped work item becomes
-allocatable — rerun allocate.py and redraw the table before asking for 送出.
+stage 5. Carry every change back into `rows.json`: a changed 時數 becomes a `locked` row, a
+newly mapped work item becomes allocatable with its ticket. Rerun both scripts and show the new
+md before asking for 送出.
 
 ## 5. Submit
 

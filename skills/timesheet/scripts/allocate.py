@@ -17,6 +17,9 @@ A row receives extra hours only when allocatable (mapped to an issue) and not lo
 its hours by hand). Weight = sqrt(changed lines), so one huge diff does not take the whole
 shortfall; when every eligible row has 0 lines the shortfall is split evenly. Shares are whole
 0.5 h units handed out by largest remainder, so a day never goes over the target.
+
+Any other top-level keys and row fields pass through unchanged, so the output can go straight to
+render.py.
 """
 import json
 import math
@@ -68,7 +71,7 @@ def main():
         summary[date] = {"logged": already, "before": planned, "after": final,
                          "total_after": already + final, "over_target": already + planned > target}
 
-    json.dump({"target_hours": target, "days": summary, "rows": rows},
+    json.dump({**data, "target_hours": target, "days": summary, "rows": rows},
               sys.stdout, ensure_ascii=False, indent=2)
     print()
 
