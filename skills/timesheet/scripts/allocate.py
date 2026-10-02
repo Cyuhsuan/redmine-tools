@@ -25,6 +25,8 @@ import json
 import math
 import sys
 
+import config
+
 UNIT = 0.5
 
 
@@ -49,7 +51,8 @@ def allocate_day(rows, shortfall_units):
 
 def main():
     data = json.load(open(sys.argv[1]))
-    target = float(data.get("target_hours", 8))
+    # The Daily target comes from Setup unless rows.json overrides it.
+    target = float(data.get("target_hours", config.load().get("target_hours", 8)))
     logged = data.get("logged", {})
     rows = data["rows"]
     for r in rows:

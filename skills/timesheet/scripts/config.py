@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
-"""Read and edit the user's timesheet config — currently the Scope (saved Repo list).
+"""Read and edit the user's timesheet config: Platform settings and the Scope (saved Repo list).
 
-Usage: config.py show | list | add <path> | remove <path> | import-herdr [--workspace <id>]
+Usage:
+  config.py show | check | list
+  config.py add <path> | remove <path> | import-herdr [--workspace <id>]
+  config.py setup <json> | set-platform <name> | set-activities <json> | set-target <hours>
 
 The config lives at $XDG_CONFIG_HOME/timesheet-tools/config.json (default ~/.config/...).
-Every command prints JSON to stdout. `add` exits 1 when the path is rejected; `remove` exits 1
-when the Repo is not in the Scope; `import-herdr` exits 1, changing nothing, when it is not run
-inside Herdr or Herdr reports an error.
+Every command prints JSON to stdout and exits 1, changing nothing, when it fails or rejects its
+input. `check` reports whether Setup is complete.
+
+Platform settings: `platform` (one of PLATFORMS), `activities` mapping each use in USES to the
+Platform's {"id", "name"}, and `target_hours` (Daily target, default 8). `setup` writes all three
+at once so a failed Setup never leaves a half-written config; the `set-*` commands change one.
+Changing the Platform clears `activities`, which belong to the old Platform. URLs, API keys and
+emails are never stored here.
 
 `import-herdr` is a one-time Import: the Repos open in a Herdr workspace (default: the current
 one) are added under the same rules as `add`. Later changes in Herdr never alter the Scope.
@@ -19,6 +27,11 @@ import os
 import pathlib
 import subprocess
 import sys
+
+
+PLATFORMS = ("redmine",)
+USES = ("development", "review", "discussion")
+DEFAULT_TARGET = 8.0
 
 
 def config_path():
@@ -109,37 +122,106 @@ def import_herdr(data, workspace):
     return result
 
 
+def check(data):
+    missing = [k for k in ("platform", "activities") if not data.get(k)]
+    return {"ready": not missing, "missing": missing, "platform": data.get("platform"),
+            "target_hours": data.get("target_hours", DEFAULT_TARGET),
+            "scope_size": len(data["scope"])}
+
+
+def parse_platform(name):
+    if name not in PLATFORMS:
+        raise ValueError(f"unknown platform {name!r}; choose one of {list(PLATFORMS)}")
+    return name
+
+
+def parse_activities(raw):
+    acts = json.loads(raw) if isinstance(raw, str) else raw
+    if not isinstance(acts, dict) or set(acts) != set(USES):
+        raise ValueError(f"activities must map exactly {list(USES)}")
+    out = {}
+    for use in USES:
+        a = acts[use]
+        if not isinstance(a, dict) or not isinstance(a.get("id"), int) or not a.get("name"):
+            raise ValueError(f"activities.{use} must be {{\"id\": <int>, \"name\": <str>}}")
+        out[use] = {"id": a["id"], "name": str(a["name"])}
+    return out
+
+
+def parse_target(raw):
+    try:
+        h = float(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"target hours must be a number, got {raw!r}")
+    if not 0 < h <= 24 or h * 2 != int(h * 2):
+        raise ValueError("target hours must be in 0.5 h steps between 0.5 and 24")
+    return h
+
+
+def setup(data, raw):
+    s = json.loads(raw)
+    data["platform"] = parse_platform(s.get("platform"))
+    data["activities"] = parse_activities(s.get("activities"))
+    data["target_hours"] = parse_target(s.get("target_hours", DEFAULT_TARGET))
+    return check(data)
+
+
+def set_platform(data, name):
+    name = parse_platform(name)
+    if data.get("platform") != name:
+        data.pop("activities", None)
+    data["platform"] = name
+    return check(data)
+
+
+def set_activities(data, raw):
+    data["activities"] = parse_activities(raw)
+    return {"activities": data["activities"]}
+
+
+def set_target(data, raw):
+    data["target_hours"] = parse_target(raw)
+    return {"target_hours": data["target_hours"]}
+
+
+def run(cmd, rest, data):
+    """Returns (result, save?, exit code)."""
+    if cmd == "show" and not rest:
+        return {"path": str(config_path()), "config": data}, False, 0
+    if cmd == "check" and not rest:
+        return check(data), False, 0
+    if cmd == "list" and not rest:
+        return {"scope": data["scope"]}, False, 0
+    if cmd == "add" and len(rest) == 1:
+        r = add(data, rest[0])
+        return r, r["status"] == "added", 1 if r["status"] == "rejected" else 0
+    if cmd == "remove" and len(rest) == 1:
+        r = remove(data, rest[0])
+        return r, r["status"] == "removed", 1 if r["status"] == "not_found" else 0
+    if cmd == "import-herdr" and (not rest or (len(rest) == 2 and rest[0] == "--workspace")):
+        r = import_herdr(data, rest[1] if rest else None)
+        if "error" in r:
+            return r, False, 1
+        return r, bool(r["added"]), 0
+    setters = {"setup": setup, "set-platform": set_platform,
+               "set-activities": set_activities, "set-target": set_target}
+    if cmd in setters and len(rest) == 1:
+        try:
+            return setters[cmd](data, rest[0]), True, 0
+        except (ValueError, json.JSONDecodeError) as e:
+            return {"error": "invalid", "message": str(e)}, False, 1
+    return None, False, 2
+
+
 def main():
     args = sys.argv[1:]
-    if not args or args[0] not in ("show", "list", "add", "remove", "import-herdr") \
-            or (args[0] in ("add", "remove") and len(args) != 2) \
-            or (args[0] == "import-herdr" and args[1:] and
-                (len(args) != 3 or args[1] != "--workspace")):
+    data = load()
+    result, changed, code = run(args[0], args[1:], data) if args else (None, False, 2)
+    if result is None:
         print(__doc__, file=sys.stderr)
         sys.exit(2)
-    cmd = args[0]
-    data = load()
-    code = 0
-    if cmd == "show":
-        result = {"path": str(config_path()), "config": data}
-    elif cmd == "list":
-        result = {"scope": data["scope"]}
-    elif cmd == "add":
-        result = add(data, args[1])
-        if result["status"] == "added":
-            save(data)
-        code = 1 if result["status"] == "rejected" else 0
-    elif cmd == "import-herdr":
-        result = import_herdr(data, args[2] if len(args) == 3 else None)
-        if "error" in result:
-            code = 1
-        elif result["added"]:
-            save(data)
-    else:
-        result = remove(data, args[1])
-        if result["status"] == "removed":
-            save(data)
-        code = 1 if result["status"] == "not_found" else 0
+    if changed:
+        save(data)
     json.dump(result, sys.stdout, ensure_ascii=False, indent=2)
     print()
     sys.exit(code)

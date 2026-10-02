@@ -14,6 +14,36 @@ test -n "${REDMINE_URL:-}" && test -n "${REDMINE_API_KEY:-}"
 
 Missing → point at `<skill-dir>/../redmine/references/setup.md` and stop.
 
+## Verify
+
+Setup's connection check:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  -H "X-Redmine-API-Key: $REDMINE_API_KEY" "$REDMINE_URL/users/current.json"
+```
+
+| Result | Meaning |
+| --- | --- |
+| `200` | Working |
+| `401` | Wrong key, or the REST web service is disabled |
+| `000` | Cannot reach the host — URL, VPN or DNS |
+
+Anything but `200` → explain with this table and point at
+`<skill-dir>/../redmine/references/setup.md`.
+
+## Activity list
+
+Setup offers the site's own Activities:
+
+```bash
+curl -sS --fail-with-body -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
+  "$REDMINE_URL/enumerations/time_entry_activities.json"
+```
+
+Offer only entries with `active: true`. The `is_default` entry is a hint for `development`,
+nothing more — the user picks each of the three.
+
 ## Candidates
 
 Fetch once per run:
@@ -44,14 +74,8 @@ Sum `hours` per `spent_on` for `logged`; keep `issue.id` + `spent_on` pairs for 
 
 ## Activities
 
-| Use | Activity |
-| --- | --- |
-| development (default) | `9 程式開發` |
-| review | `11 Code Review(審核)` |
-| discussion | `12 問題討論` |
-
-Ids differ per site. Resolve them from `/enumerations/time_entry_activities.json` if this table
-looks stale. Never fall back to Redmine's own default activity.
+The ids come from the user's config (`activities`), chosen in Setup from the Activity list.
+Send the configured id as `activity_id`; never fall back to Redmine's own default activity.
 
 ## Submit
 

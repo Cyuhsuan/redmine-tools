@@ -19,19 +19,26 @@
 
 ## 需求
 
-- `REDMINE_URL`、`REDMINE_API_KEY` 環境變數 — 設定方式見 `skills/redmine/references/setup.md`。
-  API key 是個人憑證，各自設定，不要放進 repo。
 - `curl`、`python3`、`git`
-- 報工時前先建立檢查範圍：對 Claude 說「把這個 repo 加入報工時檢查範圍」，或在 Herdr 內說「從 Herdr 匯入」
-  一次匯入某個 workspace 開著的 repo（之後 Herdr 的變化不會影響檢查範圍）。
-  設定檔在 `$XDG_CONFIG_HOME/timesheet-tools/config.json`（預設 `~/.config/...`），只存個人資料，不進版控。
+- Redmine 平台：`REDMINE_URL`、`REDMINE_API_KEY` 環境變數 — 設定方式見
+  `skills/redmine/references/setup.md`。API key 是個人憑證，各自設定，不要放進 repo。
 
-## 依平台調整
+## 第一次使用
 
-- Redmine 活動 ID：預設 `9 程式開發`、`11 Code Review(審核)`、`12 問題討論`。
-  其他站台請以 `$REDMINE_URL/enumerations/time_entry_activities.json` 對照修改
-  `skills/timesheet/platforms/redmine.md`。
-- 每日目標 8 h：`rows.json` 的 `target_hours`，補分配依改動行數的 √ 比例分配，非實測時間。
+直接說「報工時」。沒有設定時會先跑 Setup：
+
+1. 選平台（目前只有 Redmine）並驗證連線
+2. 從站台的活動列表挑選「開發／Code Review／討論」各用哪個活動
+3. 設定每日目標（預設 8 h）
+4. 建立檢查範圍：在 Herdr 內可「從 Herdr 匯入」目前 workspace 開著的 repo，或「把這個 repo 加入報工時檢查範圍」
+
+之後可隨時說「設定報工時」重跑、「每日目標改 7.5」、「從 Herdr 匯入」、「移除 <repo>」。
+匯入是一次性快照，之後 Herdr 的變化不會影響檢查範圍。
+
+設定檔在 `$XDG_CONFIG_HOME/timesheet-tools/config.json`（預設 `~/.config/...`），只存平台、活動、
+每日目標與檢查範圍，不存網址或 API key，也不進版控。
+
+補分配依改動行數的 √ 比例分配，不是實測時間；工時表格式由腳本固定產出。
 
 ## 測試
 
