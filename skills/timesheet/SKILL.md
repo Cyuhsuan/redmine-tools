@@ -3,7 +3,7 @@ name: timesheet
 description: |
   Batch time logging: collect the user's commits from every repo in their saved Scope (檢查範圍), map them to work items on the time-tracking platform (Redmine today), top each day up to 8 h across the day's changes, draft a timesheet for review, and post time entries only after the user approves.
   TRIGGER — load this skill BEFORE any other action whenever the prompt says 報工時, 記工時, 填工時, 補工時, 工時清單, 今天做了什麼要報, timesheet, log time / log hours, or asks to turn today's (or a date range's) commits into time entries (Redmine or otherwise). Takes precedence over the general `redmine` skill for these requests.
-  Also TRIGGER to view or edit the Scope: 檢查範圍, 報工時範圍, 加入/移除 repo 到報工時, list timesheet repos.
+  Also TRIGGER to view or edit the Scope: 檢查範圍, 報工時範圍, 加入/移除 repo 到報工時, 從 Herdr 匯入, list timesheet repos.
   SKIP for a single ad-hoc time entry the user fully specifies (issue, hours, activity) — use `redmine` for that.
 ---
 
@@ -30,11 +30,18 @@ The Scope lives in the user's config file and is read and written only through
 python3 <skill-dir>/scripts/config.py list
 python3 <skill-dir>/scripts/config.py add <path>      # "加入這個 repo" → the current directory
 python3 <skill-dir>/scripts/config.py remove <path>
+python3 <skill-dir>/scripts/config.py import-herdr [--workspace <id>]   # "從 Herdr 匯入"
 ```
 
 `add` saves the main worktree root, so a subdirectory or another worktree of the same repo
 lands on the same entry. Report its `status` as-is: `added`, `exists` (already in the Scope),
 or `rejected` with its `reason`. `remove` also works for a Repo whose directory is gone.
+
+`import-herdr` is a one-time Import of the Repos open in a Herdr workspace — the current one
+unless the user names another (`herdr workspace list` shows ids and labels). Report its
+`added`, `exists` and `skipped` (with reasons) lists. It is a snapshot: tell the user later
+Herdr changes will not update the Scope. On `not_in_herdr`, say Import needs a Herdr pane and
+offer `add` instead.
 
 ## 1. Enter
 
@@ -54,7 +61,7 @@ not change the Scope.
 
 Exit 1 with an `error`:
 
-- `empty_scope` → stop and tell the user to add Repos (see **Scope**). Never fall back to
+- `empty_scope` → stop and tell the user to add Repos or import from Herdr (see **Scope**). Never fall back to
   guessing repos from Herdr panes or the current directory.
 - `not_in_scope` → ask whether to add those Repos to the Scope; add them only on a yes, then
   rerun.

@@ -55,3 +55,29 @@ class ScriptTest(unittest.TestCase):
             fh.write("x\n" * lines)
         self.git(repo, "add", ".")
         self.git(repo, "-c", f"user.email={email}", "commit", "-q", "-m", subject, date=date)
+
+    def fake_herdr(self, workspaces, current=None):
+        """Put a fake `herdr` on PATH whose `pane list --workspace <id>` returns panes with the
+        given cwds; unknown workspaces fail like the real CLI. Also marks the env as in-Herdr."""
+        bindir = self.tmp / "bin"
+        bindir.mkdir(exist_ok=True)
+        data = {ws: {"id": "cli:pane:list", "result": {"type": "pane_list", "panes": [
+            {"pane_id": f"{ws}:p{i}", "workspace_id": ws, "cwd": str(cwd)}
+            for i, cwd in enumerate(cwds, 1)]}} for ws, cwds in workspaces.items()}
+        (bindir / "herdr.json").write_text(json.dumps(data))
+        fake = bindir / "herdr"
+        fake.write_text(f"""#!{sys.executable}
+import json, sys
+data = json.load(open({str(bindir / "herdr.json")!r}))
+args = sys.argv[1:]
+ws = args[args.index("--workspace") + 1]
+if args[:2] != ["pane", "list"] or ws not in data:
+    print(json.dumps({{"error": {{"code": "workspace_not_found",
+                                 "message": f"workspace {{ws}} not found"}}}}))
+    sys.exit(1)
+print(json.dumps(data[ws]))
+""")
+        fake.chmod(0o755)
+        self.env["PATH"] = f"{bindir}{os.pathsep}{self.env['PATH']}"
+        self.env["HERDR_ENV"] = "1"
+        self.env["HERDR_WORKSPACE_ID"] = current or next(iter(workspaces))

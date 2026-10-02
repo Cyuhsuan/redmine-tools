@@ -30,7 +30,7 @@ def scope_repos(only):
     scope = config.load()["scope"]
     if not scope:
         return None, {"error": "empty_scope",
-                      "message": "Scope is empty; add Repos to it first."}
+                      "message": "Scope is empty; add Repos or import them from Herdr first."}
     if only:
         wanted = []
         outside = []

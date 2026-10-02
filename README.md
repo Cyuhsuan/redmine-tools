@@ -22,7 +22,8 @@
 - `REDMINE_URL`、`REDMINE_API_KEY` 環境變數 — 設定方式見 `skills/redmine/references/setup.md`。
   API key 是個人憑證，各自設定，不要放進 repo。
 - `curl`、`python3`、`git`
-- 報工時前先建立檢查範圍：對 Claude 說「把這個 repo 加入報工時檢查範圍」。
+- 報工時前先建立檢查範圍：對 Claude 說「把這個 repo 加入報工時檢查範圍」，或在 Herdr 內說「從 Herdr 匯入」
+  一次匯入某個 workspace 開著的 repo（之後 Herdr 的變化不會影響檢查範圍）。
   設定檔在 `$XDG_CONFIG_HOME/timesheet-tools/config.json`（預設 `~/.config/...`），只存個人資料，不進版控。
 
 ## 依平台調整
