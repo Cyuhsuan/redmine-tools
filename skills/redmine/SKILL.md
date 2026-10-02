@@ -3,7 +3,7 @@ name: redmine
 description: |
   Read and update Redmine issues through the REST API — look up an issue, list issues assigned to the user, turn an issue into a project spec draft, append a note, change status, or log time.
   TRIGGER — load this skill BEFORE any other action (before reading files, running curl, or answering from memory) whenever: the prompt says Redmine / redmine / RM in any form; contains a Redmine issue URL (…/issues/<number>) or a URL on the $REDMINE_URL host; references a bare ticket number like #1234, 單號 1234, issue 1234, 票 1234; or uses 工單, 議題, 票, ticket, 待辦單, 指派給我, 我的單, 寫進單裡, 在單上留言/回覆/備註, 改狀態, 結單, 開單 — even when the request looks like a one-liner.
-  SKIP for batch time logging (報工時, 記工時, 工時清單) — use `redmine-timesheet`. Also SKIP when the issue clearly belongs to another tracker: GitHub (github.com, gh, PR), GitLab, Jira, Linear, or Notion is named or linked.
+  SKIP for batch time logging (報工時, 記工時, 工時清單) — use `timesheet`. Also SKIP when the issue clearly belongs to another tracker: GitHub (github.com, gh, PR), GitLab, Jira, Linear, or Notion is named or linked.
 ---
 
 # Redmine

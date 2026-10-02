@@ -1,7 +1,7 @@
 {
-  "name": "redmine-tools",
-  "version": "1.0.0",
-  "description": "Read and update Redmine issues over the REST API, and turn git commits from Herdr panes into reviewed Redmine time entries.",
+  "name": "timesheet-tools",
+  "version": "2.0.0",
+  "description": "Turn git commits into reviewed time entries on a time-tracking platform (Redmine today), plus Redmine issue lookup and updates.",
   "author": { "name": "Harry Chang" },
-  "keywords": ["redmine", "timesheet", "herdr"]
+  "keywords": ["timesheet", "time tracking", "redmine", "herdr"]
 }

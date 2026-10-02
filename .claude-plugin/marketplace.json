@@ -1,16 +1,16 @@
 {
-  "name": "redmine-tools",
+  "name": "timesheet-tools",
   "owner": {
     "name": "Harry Chang"
   },
   "metadata": {
-    "description": "Redmine skills for Claude Code: issue lookup/updates and commit-based timesheets."
+    "description": "報工時工具包 for Claude Code: commit-based timesheets, with Redmine as the first platform."
   },
   "plugins": [
     {
-      "name": "redmine-tools",
+      "name": "timesheet-tools",
       "source": "./",
-      "description": "Redmine issue lookup/updates and commit-based timesheet logging."
+      "description": "Commit-based timesheet logging, plus Redmine issue lookup and updates."
     }
   ]
 }

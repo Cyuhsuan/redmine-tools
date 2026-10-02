@@ -1,32 +1,34 @@
 ---
-name: redmine-timesheet
+name: timesheet
 description: |
-  Batch time logging to Redmine: collect the user's commits from every repo open in Herdr, map them to Redmine issues, top each day up to 8 h across the day's changes, draft a timesheet for review, and post time entries only after the user approves.
-  TRIGGER — load this skill BEFORE any other action whenever the prompt says 報工時, 記工時, 填工時, 補工時, 工時清單, 今天做了什麼要報, timesheet, log time / log hours, or asks to turn today's (or a date range's) commits into Redmine time entries. Takes precedence over the general `redmine` skill for these requests.
+  Batch time logging: collect the user's commits from every repo open in Herdr, map them to work items on the time-tracking platform (Redmine today), top each day up to 8 h across the day's changes, draft a timesheet for review, and post time entries only after the user approves.
+  TRIGGER — load this skill BEFORE any other action whenever the prompt says 報工時, 記工時, 填工時, 補工時, 工時清單, 今天做了什麼要報, timesheet, log time / log hours, or asks to turn today's (or a date range's) commits into time entries (Redmine or otherwise). Takes precedence over the general `redmine` skill for these requests.
   SKIP for a single ad-hoc time entry the user fully specifies (issue, hours, activity) — use `redmine` for that.
 ---
 
-# Redmine timesheet
+# Timesheet
 
 Five stages, in order. Never skip stage 4's review, and never post in stage 5 without an explicit
 go-ahead in the current turn.
 
-Shared rules from the `redmine` skill apply: auth header `X-Redmine-API-Key: $REDMINE_API_KEY`,
-`curl -sS --fail-with-body`, never echo or store the key, payloads go in the scratchpad.
-
 `<skill-dir>` below is this skill's base directory, shown when the skill loads. Scripts and
 references are resolved from it, never from a fixed install path.
+
+Everything Platform-specific — credentials, how to fetch candidates and already-logged hours,
+Activity ids, the submit call — lives in the Platform file. The Platform is Redmine; read
+`<skill-dir>/platforms/redmine.md` before stage 1 and follow its sections where this file names
+them.
 
 ## 1. Enter
 
 Check, and stop with a clear message if any fails:
 
 ```bash
-test "${HERDR_ENV:-}" = 1 && test -n "${REDMINE_URL:-}" && test -n "${REDMINE_API_KEY:-}"
+test "${HERDR_ENV:-}" = 1
 ```
 
-Missing Redmine variables → point at `<skill-dir>/../redmine/references/setup.md`.
-Not inside Herdr → say so and stop; do not fall back to guessing repos.
+Then run the Platform file's **Preflight**. Not inside Herdr → say so and stop; do not fall back
+to guessing repos.
 
 Date range: whatever the user said ("昨天", "這週", a date). Default today. Say the resolved
 dates back in the first line of the reply.
@@ -45,42 +47,33 @@ into **sessions**: consecutive commits no more than 2 h apart on the same day.
 Also reported: panes that are not git repos (`skipped_panes`) and `uncommitted` changes. Show
 uncommitted work as a note only — it carries no hours.
 
-## 3. Map to Redmine issues
+## 3. Map to work items
 
-Fetch the candidates once:
-
-```bash
-curl -sS --fail-with-body -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
-  "$REDMINE_URL/issues.json?assigned_to_id=me&status_id=open&limit=100"
-```
+Fetch the candidates once, using the Platform file's **Candidates** call.
 
 For each branch group, take the first rule that matches and record which one:
 
 | 依據 | Rule |
 | --- | --- |
-| 明確票號 | `#12345` / `refs #12345` / `issues/12345` in a commit subject or branch name |
-| 規格連結 | A `Redmine: …/issues/<id>` line in the repo's `.scratch/<feature>/` spec or docs matching the branch's feature |
+| 明確票號 | An explicit reference (Platform file's **Explicit references**) in a commit subject or branch name |
+| 規格連結 | A spec link (Platform file's **Explicit references**) in the repo's `.scratch/<feature>/` spec or docs matching the branch's feature |
 | 主旨比對 | A feature code in the branch (e.g. `B1-7` from `feat_B1-7`) appears in exactly one candidate subject (`開發-B1-7-0 公司治理`), or the commit subjects clearly describe one candidate (表單定義 → `[後台] 表單管理`) — scoped to the candidate whose project matches the repo |
 | 未對應 | Nothing above, or more than one candidate fits |
 
 Never guess between multiple candidates. 未對應 rows go to the user in stage 4.
 
-Merge sessions that map to the same issue on the same date into one row; keep the session times
-in the 依據 column.
+Merge sessions that map to the same work item on the same date into one row; keep the session
+times in the 依據 column.
 
 ## 4. Draft the timesheet for review
 
-Fetch what is already logged for the range so nothing is double-counted:
-
-```bash
-curl -sS --fail-with-body -H "X-Redmine-API-Key: $REDMINE_API_KEY" \
-  "$REDMINE_URL/time_entries.json?user_id=me&from=<since>&to=<until>&limit=100"
-```
+Fetch what is already logged for the range so nothing is double-counted, using the Platform
+file's **Already logged** call.
 
 ### Top up to 8 h
 
 Commit gaps miss reading, meetings and debugging, so each day with commits is topped up to 8 h.
-Write the issue rows to `rows.json` in the scratchpad and run:
+Write the work-item rows to `rows.json` in the scratchpad and run:
 
 ```bash
 python3 <skill-dir>/scripts/allocate.py <scratchpad>/rows.json
@@ -95,7 +88,7 @@ python3 <skill-dir>/scripts/allocate.py <scratchpad>/rows.json
 
 - `hours` = the row's summed `estimated_hours`; `lines` = the row's summed session `lines`
   (changed lines, lockfiles and generated files excluded).
-- `logged` = hours already in Redmine per date, from the call above.
+- `logged` = hours already on the Platform per date, from the call above.
 - `allocatable: false` for 未對應 rows — they get nothing and do not count toward the day.
 - `locked: true` for any row whose hours the user set by hand — it keeps exactly that value.
 
@@ -115,42 +108,30 @@ Write `timesheet-<since>[_<until>].md` to the scratchpad and show the same table
 
 估算 = `base_hours`, 補分配 = `added_hours`, 時數 = what will be sent.
 
-- 活動 default `9 程式開發`. Use `11 Code Review(審核)` or `12 問題討論` only when every commit in
-  the row is clearly that kind of work. Never fall back to Redmine's own default activity. Resolve
-  ids from `/enumerations/time_entry_activities.json` if this table looks stale.
+- 活動: the Platform file's **Activities** — default is the development activity. Use review or
+  discussion only when every commit in the row is clearly that kind of work.
 - 說明: one Traditional Chinese line summarising the commit subjects — what was done, not how.
 - 依據: session times and short hashes, e.g. `14:19–15:47 d26b18a…378e3fa (7)`.
 
 Below the table:
 
-- Per day: 已在 Redmine / 本次估算 / 補分配 / 送出後合計 (should read 8).
+- Per day: 已在平台 / 本次估算 / 補分配 / 送出後合計 (should read 8).
 - ⚠ rows: 未對應 (unallocated — mapping it changes the split, so rerun allocate); same
-  issue+date already has a time entry; a day over 8 h; sessions in different repos that
+  work item+date already has a time entry; a day over 8 h; sessions in different repos that
   overlap in time (parallel agents — the user decides whether both count).
 - A one-line note that 補分配 is proportional to changed lines, not measured time — say 「指定某
   列時數」 to lock it and rebalance the rest.
 
 Then stop and wait. The user edits the md file or replies with changes; re-read the file before
-stage 5. Any changed 時數 becomes a `locked` row and any newly mapped issue becomes allocatable —
-rerun allocate.py and redraw the table before asking for 送出.
+stage 5. Any changed 時數 becomes a `locked` row and any newly mapped work item becomes
+allocatable — rerun allocate.py and redraw the table before asking for 送出.
 
 ## 5. Submit
 
 Only after an explicit 「送出」/ yes for this table. Rows still 未對應 or with 0 hours are not
 sent — list them as skipped.
 
-For each row write a payload to the scratchpad and post it:
-
-```json
-{"time_entry":{"issue_id":57379,"spent_on":"2026-10-01","hours":2.0,"activity_id":9,"comments":"<說明>"}}
-```
-
-```bash
-curl -sS --fail-with-body -X POST -H "Content-Type: application/json" \
-  -H "X-Redmine-API-Key: $REDMINE_API_KEY" -d @<payload.json> "$REDMINE_URL/time_entries.json"
-```
-
-`201` with the created entry is success. Report per row: issue link `$REDMINE_URL/issues/<id>`,
-hours, and the returned time entry id. On any failure, report the error body for that row,
-continue with the rest, and do **not** retry automatically — a timeout does not prove the entry
-was not created; check `/time_entries.json` before re-sending.
+Post each row with the Platform file's **Submit** section and report per row as it says. On any
+failure, report the error body for that row, continue with the rest, and do **not** retry
+automatically — a timeout does not prove the entry was not created; check with the **Already
+logged** call before re-sending.

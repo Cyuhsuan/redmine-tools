@@ -2,7 +2,7 @@
 
 ### Issue tracker
 
-Issues are tracked in GitHub Issues for Cyuhsuan/redmine-tools (via `gh`). See `docs/agents/issue-tracker.md`.
+Issues are tracked in GitHub Issues for Cyuhsuan/timesheet-tools (via `gh`). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
