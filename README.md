@@ -5,7 +5,7 @@
 
 | Skill | 用途 |
 | --- | --- |
-| `timesheet` | 報工時：收集 Herdr 各 pane 的 git commits → 對應平台上的票 → 每天補滿 8 h → 草稿審核 → 確認後送出 |
+| `timesheet` | 報工時：收集檢查範圍（Scope）內各 repo 的 git commits → 對應平台上的票 → 每天補滿 8 h → 草稿審核 → 確認後送出 |
 | `redmine` | Redmine 平台附帶工具：查單、列出指派給我的單、留言、改狀態、單筆記工時、把單轉成規格草稿 |
 
 ## 安裝
@@ -22,7 +22,8 @@
 - `REDMINE_URL`、`REDMINE_API_KEY` 環境變數 — 設定方式見 `skills/redmine/references/setup.md`。
   API key 是個人憑證，各自設定，不要放進 repo。
 - `curl`、`python3`、`git`
-- `timesheet` 另需在 Herdr 內執行（`HERDR_ENV=1`，`herdr` 在 PATH 上）。
+- 報工時前先建立檢查範圍：對 Claude 說「把這個 repo 加入報工時檢查範圍」。
+  設定檔在 `$XDG_CONFIG_HOME/timesheet-tools/config.json`（預設 `~/.config/...`），只存個人資料，不進版控。
 
 ## 依平台調整
 

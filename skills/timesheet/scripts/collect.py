@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""Collect the user's commits from every repo open in Herdr and group them into work sessions.
+"""Collect the user's commits from every Repo in the Scope and group them into work sessions.
 
-Usage: collect.py [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--gap-hours 2] [--lead-hours 0.5]
+Usage: collect.py [--since YYYY-MM-DD] [--until YYYY-MM-DD] [--repo PATH ...]
+                  [--gap-hours 2] [--lead-hours 0.5]
 
-Prints JSON to stdout. Read-only: runs `herdr pane list`, `git rev-parse`, `git log`,
-`git status`. Never writes anywhere.
+`--repo` (repeatable) narrows this run to those Repos; each must already be in the Scope.
+Prints JSON to stdout. On an empty Scope or a `--repo` outside it, prints {"error": ...} and
+exits 1. Read-only: runs `git rev-parse`, `git worktree`, `git log`, `git status`.
 """
 import argparse
 import datetime as dt
 import json
+import os
 import subprocess
 import sys
+
+import config
 
 
 def run(args, cwd=None):
@@ -20,21 +25,35 @@ def run(args, cwd=None):
     return r.stdout
 
 
-def herdr_repos():
-    panes = json.loads(run(["herdr", "pane", "list"]))["result"]["panes"]
-    repos = {}
-    skipped = []
-    for p in panes:
-        cwd = p.get("cwd")
-        if not cwd:
+def scope_repos(only):
+    """Split the Scope (or the `only` subset of it) into usable Repos and missing ones."""
+    scope = config.load()["scope"]
+    if not scope:
+        return None, {"error": "empty_scope",
+                      "message": "Scope is empty; add Repos to it first."}
+    if only:
+        wanted = []
+        outside = []
+        for path in only:
+            root = config.repo_root(path) or os.path.realpath(os.path.expanduser(path))
+            (wanted if root in scope else outside).append(root)
+        if outside:
+            return None, {"error": "not_in_scope", "repos": outside}
+        scope = [r for r in scope if r in wanted]
+    usable, missing = [], []
+    for repo in scope:
+        root = config.repo_root(repo)
+        if root == repo:
+            usable.append(repo)
             continue
-        try:
-            root = run(["git", "rev-parse", "--show-toplevel"], cwd=cwd).strip()
-        except RuntimeError:
-            skipped.append({"pane_id": p["pane_id"], "cwd": cwd, "reason": "not a git repo"})
-            continue
-        repos.setdefault(root, []).append(p["pane_id"])
-    return repos, skipped
+        if not os.path.exists(repo):
+            reason = "path does not exist"
+        elif root is None:
+            reason = "not a git repository"
+        else:
+            reason = f"no longer a repository root (now {root})"
+        missing.append({"repo": repo, "reason": reason})
+    return (usable, missing), None
 
 
 # Generated or vendored files that would swamp a line count without reflecting effort.
@@ -110,16 +129,22 @@ def main():
     today = dt.date.today().isoformat()
     ap.add_argument("--since", default=today)
     ap.add_argument("--until", default=None)
+    ap.add_argument("--repo", action="append", default=[])
     ap.add_argument("--gap-hours", type=float, default=2.0)
     ap.add_argument("--lead-hours", type=float, default=0.5)
     a = ap.parse_args()
     until = a.until or a.since
 
-    repos, skipped = herdr_repos()
+    found, error = scope_repos(a.repo)
+    if error:
+        json.dump(error, sys.stdout, ensure_ascii=False, indent=2)
+        print()
+        sys.exit(1)
+    repos, missing = found
     report = {"since": a.since, "until": until, "gap_hours": a.gap_hours,
-              "lead_hours": a.lead_hours, "repos": [], "skipped_panes": skipped}
-    for root, pane_ids in sorted(repos.items()):
-        entry = {"repo": root, "panes": pane_ids}
+              "lead_hours": a.lead_hours, "repos": [], "missing_repos": missing}
+    for root in sorted(repos):
+        entry = {"repo": root}
         try:
             email, cs = commits(root, a.since, until)
             branch = run(["git", "branch", "--show-current"], cwd=root).strip()
